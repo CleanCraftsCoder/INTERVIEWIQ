@@ -30,7 +30,8 @@ const ResumeUploader = ({ onUploadSuccess }) => {
   };
 
   const handleFileSelect = async (file) => {
-    if (!file.type.includes('pdf')) {
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    if (!isPdf) {
       setError('Please select a PDF file');
       return;
     }
@@ -53,10 +54,18 @@ const ResumeUploader = ({ onUploadSuccess }) => {
         }
       });
 
+      const rawText = response.data?.text;
+      const safeText = typeof rawText === 'string'
+        ? rawText
+        : rawText != null
+          ? JSON.stringify(rawText)
+          : '';
+
       setUploadedFile({
         name: file.name,
         size: file.size,
-        text: response.data.text
+        text: safeText,
+        pages: response.data.pages ?? 0
       });
 
       if (onUploadSuccess) {
@@ -161,7 +170,9 @@ const ResumeUploader = ({ onUploadSuccess }) => {
             Extracted Text Preview:
           </h4>
           <div className="text-sm text-gray-600 dark:text-gray-400 max-h-32 overflow-y-auto">
-            {uploadedFile.text.substring(0, 500)}...
+            {typeof uploadedFile.text === 'string' && uploadedFile.text.length > 0
+              ? `${uploadedFile.text.substring(0, 500)}...`
+              : 'No preview available.'}
           </div>
         </div>
       )}

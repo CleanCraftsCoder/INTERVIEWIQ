@@ -49,8 +49,8 @@ const ResumeUpload = () => {
             </div>
 
             <div className="text-sm text-green-700 dark:text-green-300 mb-4">
-              <p>Pages extracted: {resumeData.pages}</p>
-              <p>Text length: {resumeData.text.length} characters</p>
+              <p>Pages extracted: {resumeData.pages ?? 0}</p>
+              <p>Text length: {resumeData?.text?.length ?? 0} characters</p>
             </div>
 
             <button

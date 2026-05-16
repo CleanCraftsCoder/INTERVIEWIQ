@@ -10,6 +10,7 @@ const Dashboard = () => {
   const [interviews, setInterviews] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   const fetchDashboardData = async () => {
     try {
@@ -44,7 +45,9 @@ const Dashboard = () => {
       // Redirect to interview room
       window.location.href = `/interview/${response.data._id}`;
     } catch (error) {
-      console.error('Error creating interview:', error);
+      const message = error.response?.data?.message || 'Error creating interview';
+      console.error('Error creating interview:', message);
+      setError(message);
     }
   };
 
@@ -82,6 +85,12 @@ const Dashboard = () => {
           <span>New Interview</span>
         </button>
       </div>
+
+      {error && (
+        <div className="mb-6 p-4 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-200">
+          {error}
+        </div>
+      )}
 
       {/* Stats Cards */}
       {stats && (

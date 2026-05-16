@@ -1,5 +1,9 @@
 const Interview = require('../models/Interview');
+const User = require('../models/User');
 const { generateQuestions, analyzeAnswer, generateFeedback } = require('../utils/ai');
+const path = require('path');
+const fs = require('fs');
+const { PDFParse } = require('pdf-parse');
 
 // Create new interview
 const createInterview = async (req, res) => {
@@ -7,11 +11,47 @@ const createInterview = async (req, res) => {
     const { title, type } = req.body;
     const userId = req.user._id;
 
+    const interviewType = type || 'technical';
     const interview = new Interview({
       user: userId,
       title,
-      type: type || 'technical'
+      type: interviewType,
+      questions: []
     });
+
+    const resumeFileName = req.user.profile?.resume;
+    if (!resumeFileName) {
+      return res.status(400).json({ message: 'Please upload a resume before creating an interview.' });
+    }
+
+    const resumePath = path.join(__dirname, '..', 'uploads', resumeFileName);
+    if (!fs.existsSync(resumePath)) {
+      return res.status(400).json({ message: 'Uploaded resume file not found. Please upload again.' });
+    }
+
+    const dataBuffer = fs.readFileSync(resumePath);
+    const parser = new PDFParse(new Uint8Array(dataBuffer));
+    const resumeResult = await parser.getText();
+    await parser.destroy();
+
+    const resumeText = typeof resumeResult === 'object' ? resumeResult.text : resumeResult;
+    if (!resumeText || typeof resumeText !== 'string' || !resumeText.trim()) {
+      return res.status(500).json({ message: 'Unable to read uploaded resume. Please upload a valid PDF.' });
+    }
+
+    const generatedQuestions = await generateQuestions(resumeText, interviewType);
+    if (Array.isArray(generatedQuestions) && generatedQuestions.length > 0) {
+      interview.questions = generatedQuestions.map((question) => ({ question }));
+    } else {
+      console.warn('AI did not return generated questions, falling back to default questions.');
+      interview.questions = [
+        { question: 'Tell me about your background and what brought you to this role.' },
+        { question: 'Describe a technical challenge you solved recently.' },
+        { question: 'How do you approach learning new tools or technologies?' },
+        { question: 'Explain a project where you had to work closely with a team.' },
+        { question: 'What achievement are you most proud of in your career so far?' }
+      ];
+    }
 
     await interview.save();
 
@@ -22,6 +62,7 @@ const createInterview = async (req, res) => {
 
     res.status(201).json(interview);
   } catch (error) {
+    console.error('Error creating interview:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
@@ -122,10 +163,15 @@ const completeInterview = async (req, res) => {
       return res.status(400).json({ message: 'No questions answered' });
     }
 
-    const totalScore = questions.reduce((sum, q) => sum + (q.analysis?.score || 0), 0) / totalQuestions;
-    const averageConfidence = questions.reduce((sum, q) => sum + (q.analysis?.confidence || 0), 0) / totalQuestions;
-    const totalFillerWords = questions.reduce((sum, q) => sum + (q.analysis?.fillerWords || 0), 0);
-    const averageWpm = questions.reduce((sum, q) => sum + (q.analysis?.wpm || 0), 0) / totalQuestions;
+    const answeredQuestions = questions.filter(q => q.analysis && typeof q.analysis.score === 'number');
+    if (answeredQuestions.length === 0) {
+      return res.status(400).json({ message: 'Please answer at least one question before completing the interview.' });
+    }
+
+    const totalScore = answeredQuestions.reduce((sum, q) => sum + (q.analysis?.score || 0), 0) / answeredQuestions.length;
+    const averageConfidence = answeredQuestions.reduce((sum, q) => sum + (q.analysis?.confidence || 0), 0) / answeredQuestions.length;
+    const totalFillerWords = answeredQuestions.reduce((sum, q) => sum + (q.analysis?.fillerWords || 0), 0);
+    const averageWpm = answeredQuestions.reduce((sum, q) => sum + (q.analysis?.wpm || 0), 0) / answeredQuestions.length;
 
     // Generate AI feedback
     const feedback = await generateFeedback({

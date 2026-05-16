@@ -4,6 +4,7 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const http = require('http');
 const socketIo = require('socket.io');
+const multer = require('multer');
 
 // Load environment variables
 dotenv.config();
@@ -35,6 +36,11 @@ app.use(express.urlencoded({ extended: true }));
 // Static files for uploads
 app.use('/uploads', express.static('uploads'));
 
+// Health check route
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ status: 'ok', service: 'InterviewIQ backend', timestamp: new Date().toISOString() });
+});
+
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
@@ -63,6 +69,19 @@ io.on('connection', (socket) => {
 // Global error handler
 app.use((err, req, res, next) => {
   console.error(err.stack);
+
+  if (err instanceof multer.MulterError) {
+    return res.status(400).json({ message: err.message });
+  }
+
+  if (err.message === 'Only PDF files are allowed') {
+    return res.status(400).json({ message: err.message });
+  }
+
+  if (err.message && err.message.toLowerCase().includes('file too large')) {
+    return res.status(400).json({ message: 'File size exceeds the 5MB limit' });
+  }
+
   res.status(500).json({ message: 'Something went wrong!' });
 });
 

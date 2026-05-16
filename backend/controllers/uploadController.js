@@ -1,12 +1,18 @@
 const multer = require('multer');
-const pdfParse = require('pdf-parse');
+const { PDFParse } = require('pdf-parse');
 const path = require('path');
 const fs = require('fs');
+const User = require('../models/User');
+
+const uploadsDir = path.join(__dirname, '..', 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
 
 // Configure multer for file upload
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, 'uploads/');
+    cb(null, uploadsDir);
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
@@ -15,7 +21,10 @@ const storage = multer.diskStorage({
 });
 
 const fileFilter = (req, file, cb) => {
-  if (file.mimetype === 'application/pdf') {
+  const isPdfMime = file.mimetype === 'application/pdf';
+  const isPdfExt = path.extname(file.originalname).toLowerCase() === '.pdf';
+
+  if (isPdfMime || isPdfExt) {
     cb(null, true);
   } else {
     cb(new Error('Only PDF files are allowed'), false);
@@ -39,10 +48,14 @@ const uploadResume = async (req, res) => {
 
     // Extract text from PDF
     const dataBuffer = fs.readFileSync(req.file.path);
-    const data = await pdfParse(dataBuffer);
+    const parser = new PDFParse(new Uint8Array(dataBuffer));
+    const resumeResult = await parser.getText();
+    await parser.destroy();
+
+    const resumeText = typeof resumeResult === 'object' ? resumeResult.text : resumeResult;
+    const pageCount = typeof resumeResult === 'object' ? resumeResult.total ?? resumeResult.pages?.length ?? 0 : 0;
 
     // Save resume URL to user profile
-    const User = require('../models/User');
     await User.findByIdAndUpdate(req.user._id, {
       'profile.resume': req.file.filename
     });
@@ -50,12 +63,18 @@ const uploadResume = async (req, res) => {
     res.json({
       message: 'Resume uploaded successfully',
       fileName: req.file.filename,
-      text: data.text,
-      pages: data.numpages
+      text: resumeText,
+      pages: pageCount
     });
   } catch (error) {
     console.error('Error processing PDF:', error);
-    res.status(500).json({ message: 'Error processing resume' });
+    const message = error.message?.includes('Only PDF files')
+      ? error.message
+      : error.message?.toLowerCase().includes('invalid pdf') || error.message?.toLowerCase().includes('unexpected')
+      ? 'Error parsing PDF file. Please upload a valid, non-corrupted PDF.'
+      : 'Error processing resume. Please upload a valid PDF file.';
+    const status = error.message?.includes('Only PDF files') ? 400 : 500;
+    res.status(status).json({ message });
   }
 };
 
@@ -75,11 +94,16 @@ const extractResumeText = async (req, res) => {
     }
 
     const dataBuffer = fs.readFileSync(filePath);
-    const data = await pdfParse(dataBuffer);
+    const parser = new PDFParse(new Uint8Array(dataBuffer));
+    const resumeResult = await parser.getText();
+    await parser.destroy();
+
+    const resumeText = typeof resumeResult === 'object' ? resumeResult.text : resumeResult;
+    const pageCount = typeof resumeResult === 'object' ? resumeResult.total ?? resumeResult.pages?.length ?? 0 : 0;
 
     res.json({
-      text: data.text,
-      pages: data.numpages
+      text: resumeText,
+      pages: pageCount
     });
   } catch (error) {
     res.status(500).json({ message: 'Error extracting text' });

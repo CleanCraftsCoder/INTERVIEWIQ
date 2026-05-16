@@ -14,6 +14,7 @@ const InterviewRoom = () => {
   const [transcript, setTranscript] = useState('');
   const [analysis, setAnalysis] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const recognitionRef = useRef(null);
 
   const initializeSpeechRecognition = () => {
@@ -65,6 +66,7 @@ const InterviewRoom = () => {
 
       // Save answer
       try {
+        setError(null);
         const response = await axios.post(`/api/interview/${id}/answer`, {
           questionIndex: currentQuestionIndex,
           answer: transcript,
@@ -72,6 +74,7 @@ const InterviewRoom = () => {
         });
         setAnalysis(response.data.analysis);
       } catch (error) {
+        setError(error.response?.data?.message || 'Error saving answer.');
         console.error('Error saving answer:', error);
       }
     }
@@ -90,10 +93,13 @@ const InterviewRoom = () => {
 
   const completeInterview = async () => {
     try {
+      setError(null);
       await axios.post(`/api/interview/${id}/complete`);
       navigate(`/analytics/${id}`);
     } catch (error) {
-      console.error('Error completing interview:', error);
+      const message = error.response?.data?.message || 'Error completing interview.';
+      setError(message);
+      console.error('Error completing interview:', message);
     }
   };
 
@@ -107,6 +113,19 @@ const InterviewRoom = () => {
 
   if (!interview) {
     return <div>Interview not found</div>;
+  }
+
+  if (!interview.questions || interview.questions.length === 0) {
+    return (
+      <div className="max-w-4xl mx-auto py-24 text-center">
+        <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">
+          No questions available
+        </h2>
+        <p className="text-gray-600 dark:text-gray-400 mb-6">
+          This interview does not have generated questions yet. Upload a resume and create a new interview to generate personalized questions.
+        </p>
+      </div>
+    );
   }
 
   const currentQuestion = interview.questions[currentQuestionIndex];
@@ -131,10 +150,10 @@ const InterviewRoom = () => {
             <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
               Recording Controls
             </h3>
-            <div className="flex space-x-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <button
                 onClick={isRecording ? stopRecording : startRecording}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium ${
+                className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-colors ${
                   isRecording
                     ? 'bg-red-600 text-white hover:bg-red-700'
                     : 'bg-blue-600 text-white hover:bg-blue-700'
@@ -149,11 +168,17 @@ const InterviewRoom = () => {
                   onClick={nextQuestion}
                   className="bg-green-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-green-700 flex items-center space-x-2"
                 >
-                  <span>Next Question</span>
+                  <span>{currentQuestionIndex < interview.questions.length - 1 ? 'Next Question' : 'Submit Interview'}</span>
                   <ArrowRight size={20} />
                 </button>
               )}
             </div>
+
+            {error && (
+              <div className="mt-4 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 p-4 text-red-700 dark:text-red-200">
+                {error}
+              </div>
+            )}
           </div>
         </div>
 

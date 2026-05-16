@@ -42,7 +42,7 @@ const AnalyticsReport = () => {
 
   // Prepare chart data
   const questionData = interview.questions.map((q, index) => ({
-    question: `Q${index + 1}`,
+    question: q.question?.slice(0, 30) || `Q${index + 1}`,
     score: q.analysis?.score || 0,
     confidence: q.analysis?.confidence || 0,
     wpm: q.analysis?.wpm || 0
